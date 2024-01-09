@@ -15,8 +15,9 @@ import {
 import { useState } from "react";
 import Search from "./search";
 import { showFailureToast, usePromise } from "@raycast/utils";
-import { Collection } from "./wink";
-import { processCollection } from "./ingest";
+import { Collection } from "./type";
+import fs, { lstatSync, readdirSync } from "fs";
+import path from "path";
 
 export default function Command() {
   const [searchText, setSearchText] = useState<string>("");
@@ -74,7 +75,6 @@ export default function Command() {
                         <Search arguments={{ collection: data[key].name }} launchType={LaunchType.UserInitiated} />
                       }
                     />
-
                     <Action.Push
                       title="Edit Collection"
                       target={<CreateCollectionForm collection={data[key]} revalidate={revalidate} />}
@@ -98,10 +98,10 @@ export default function Command() {
   );
 }
 
-const supportedExtensions = [".pdf", ".pptx", ".docx", ".txt", ".md", ".tex"];
+const supportedFiletypes = [".pdf"];
 
 function CreateCollectionForm(props: {
-  collection?: Collection;
+  collection?: Collection; // if this is defined it means we are editing an existing collection
   revalidate: () => Promise<{ [key: string]: Collection }>;
 }) {
   const [name, setName] = useState(props.collection?.name ?? "");
@@ -110,23 +110,38 @@ function CreateCollectionForm(props: {
 
   const [nameError, setNameError] = useState<string | undefined>();
   const [fileError, setFileError] = useState<string | undefined>();
-  const { pop } = useNavigation();
+  const navigation = useNavigation();
 
-  const dropNameErrorIfNeeded = () => {
+  const revalidateName = () => {
     if (nameError && nameError.length > 0) {
       setNameError(undefined);
     }
   };
 
-  function dropFileErrorIfNeeded() {
+  // checks that at least 1 file has been added that is of supported file type
+  function revalidateFiles() {
     if (
       fileError &&
       fileError.length > 0 &&
-      !files.some((f) => supportedExtensions.some((filetype) => f.endsWith(filetype)))
+      !files.some((f) => supportedFiletypes.some((filetype) => f.endsWith(filetype)))
     ) {
       setFileError(undefined);
     }
   }
+
+  // returns all POSIX filepaths in directory with supportedFiletype
+  const loadDir = (dirpath: string) => {
+    const files = readdirSync(dirpath);
+    files.flatMap((file) => {
+      const fullPath = path.join(dirpath, file);
+      if (lstatSync(fullPath).isDirectory()) {
+        return loadDir(path.join(dirpath, file));
+      } else if (supportedFiletypes.includes(path.extname(file))) {
+        files.push(fullPath);
+      }
+    });
+    return files;
+  };
 
   const handleSubmit = async (values: Collection) => {
     if (values.files.length == 0) {
@@ -134,23 +149,37 @@ function CreateCollectionForm(props: {
     } else if (values.name.length == 0) {
       setNameError("Name shouldn't be empty!");
     } else if ((await LocalStorage.getItem(values.name)) && !props.collection) {
-      setNameError("Name should be unique!");
+      setNameError("Collection name already exists!");
     } else {
       try {
-        const processed = await processCollection(values);
-        if (processed && 'model' in processed && 'documents' in processed) {
-          values.model = processed.model;
-          values.documents = processed.documents;
-          await LocalStorage.setItem(values.name, JSON.stringify(values));
-          showToast({ title: "Success", message: "Files indexed successfully!" });
-        } else {
-          throw new Error("Failed to process files!")
+        // load array of unique supported files from files and directories
+        let files = values.files;
+        files = files.flatMap((file) => {
+          if (fs.lstatSync(file).isDirectory()) {
+            return loadDir(file);
+          } else if (supportedFiletypes.includes(path.extname(file))) {
+            return file;
+          }
+          return [];
+        });
+        files = [...new Set(files)]; // get unique filepaths from array
+        if (!files) {
+          setFileError("No supported filetypes found!");
+          return;
         }
+        values.files = files;
+
+        // if editing a collection and name changes, we delete the old collection
+        if (props.collection && props.collection.name !== values.name)
+          await LocalStorage.removeItem(props.collection.name);
+
+        await LocalStorage.setItem(values.name, JSON.stringify(values));
+        showToast({ title: "Success", message: "Files added to collection successfully!" });
       } catch (err) {
         showFailureToast(err);
       }
       props.revalidate();
-      pop();
+      navigation.pop();
     }
   };
 
@@ -169,7 +198,7 @@ function CreateCollectionForm(props: {
         error={nameError}
         onChange={(e) => {
           setName(e);
-          dropNameErrorIfNeeded();
+          revalidateName();
         }}
         onBlur={async (event) => {
           if (event.target.value?.length == 0) {
@@ -177,7 +206,7 @@ function CreateCollectionForm(props: {
           } else if (!props.collection && event.target.value && (await LocalStorage.getItem(event.target.value))) {
             setNameError("Name should be unique!");
           } else {
-            dropNameErrorIfNeeded();
+            revalidateName();
           }
         }}
         value={name}
@@ -192,15 +221,15 @@ function CreateCollectionForm(props: {
         error={fileError}
         onChange={(e) => {
           setFiles(e);
-          dropFileErrorIfNeeded();
+          revalidateFiles();
         }}
         onBlur={async (event) => {
           if (event.target.value?.length == 0) {
-            setFileError("Select at least 1 file!");
-          } else if (!files.some((f) => supportedExtensions.some((filetype) => f.endsWith(filetype)))) {
+            setFileError("Add at least 1 file!");
+          } else if (!files.some((f) => supportedFiletypes.some((filetype) => f.endsWith(filetype)))) {
             setFileError("Unsupported file type detected!");
           } else {
-            dropFileErrorIfNeeded();
+            revalidateFiles();
           }
         }}
         value={files}

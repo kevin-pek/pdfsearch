@@ -4,15 +4,19 @@
 import PackageDescription
 
 let package = Package(
-    name: "parse-file",
+    name: "DocumentIndexer",
     platforms: [
-        .macOS(.v10_15)
+        .macOS(.v12)
     ],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.
         // Targets can depend on other targets in this package and products from dependencies.
         .executableTarget(
-            name: "parse-file",
-            path: "Sources"),
+            name: "DocumentIndexer",
+            resources: [
+                .copy("Resources/vocab.txt"),
+                .copy("Resources/EmbeddingModel.mlmodelc")
+            ]
+        )
     ]
 )

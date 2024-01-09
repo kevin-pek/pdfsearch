@@ -34,9 +34,7 @@
   "dependencies": {
     "@raycast/api": "^1.63.0",
     "@raycast/utils": "^1.4.8",
-    "execa": "^8.0.1",
-    "wink-bm25-text-search": "^3.1.2",
-    "wink-nlp-utils": "^2.1.0"
+    "execa": "^8.0.1"
   },
   "devDependencies": {
     "@raycast/eslint-config": "^1.0.6",
@@ -49,7 +47,7 @@
   },
   "scripts": {
     "build": "ray build -e dist",
-    "build-swift": "swift build --configuration=release --arch arm64 && mv .build/arm64-apple-macosx/release/parse-file assets",
+    "build-swift": "swift build --configuration=release --arch arm64 && cp .build/arm64-apple-macosx/release/DocumentIndexer assets && cp Sources/DocumentIndexer/Resources/vocab.txt assets",
     "dev": "ray develop",
     "fix-lint": "ray lint --fix",
     "lint": "ray lint",
