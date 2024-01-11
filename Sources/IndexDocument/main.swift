@@ -11,7 +11,8 @@ if CommandLine.argc < 3 {
 
 let databasePath = CommandLine.arguments[1]
 let filePaths = CommandLine.arguments.dropFirst(2) // Drop the executable name and collection name
-if let documentIndexer = try? DocumentIndex(withDatabase: databasePath) {
+if let documentIndex = try? DocumentIndex(withDatabase: databasePath) {
+    documentIndex.clearIndex() // ensure documents within this collection are cleared before reindexing
     for filePath in filePaths {
         do {
             #if DEBUG
@@ -19,7 +20,7 @@ if let documentIndexer = try? DocumentIndex(withDatabase: databasePath) {
             let s = DispatchTime.now()
             #endif
 
-            try documentIndexer.indexDocument(atPath: filePath)
+            try documentIndex.indexDocument(atPath: filePath)
 
             #if DEBUG
             print("Indexing Done for \(filePath): \(Double(DispatchTime.now().uptimeNanoseconds - s.uptimeNanoseconds) / 1_000_000_000) seconds")

@@ -24,7 +24,11 @@ public class DocumentIndex {
         } else {
             throw NSError(domain: "DocumentIndex", code: 1, userInfo: [NSLocalizedDescriptionKey: "Failed to initialise EmbeddingModel."])
         }
-        self.db = EmbeddingDatabase(withPath: databasePath)
+        db = EmbeddingDatabase(withPath: databasePath)
+    }
+
+    public func clearIndex() {
+        db.clearDocumentsTable()
     }
 
     public func indexDocument(atPath filePath: String) throws {
@@ -48,7 +52,6 @@ public class DocumentIndex {
             print("\(documents.count) Documents Parsed.")
             #endif
 
-            db.clearDocumentsTable() // ensure documents within this collection are cleared
 
             var embeddings = [[Double]]()
             for document in documents {
