@@ -42,7 +42,7 @@ export default function Command(props: LaunchProps<{ arguments: Arguments.Search
       const databasePath = path.join(environment.supportPath, `${collectionName}.sqlite`);
       await chmod(command, "755");
       const process = execa(command, [databasePath, query]);
-      searchProcess.current = process
+      searchProcess.current = process;
       try {
         const { stdout, exitCode } = await process;
         setIsQuerying(false);
@@ -112,8 +112,8 @@ export default function Command(props: LaunchProps<{ arguments: Arguments.Search
   useEffect(() => {
     return () => {
       if (searchProcess.current) {
-        searchProcess.current.cancel()
-        searchProcess.current = null
+        searchProcess.current.cancel();
+        searchProcess.current = null;
       }
     };
   }, []);

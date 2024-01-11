@@ -182,8 +182,8 @@ function CreateCollectionForm(props: {
           await LocalStorage.removeItem(props.collection.name);
           // delete sqlite database file
           const databasePath = path.join(environment.supportPath, `${props.collection.name}.sqlite`);
-          console.log(databasePath)
-          fs.unlinkSync(databasePath)
+          console.log(databasePath);
+          fs.unlinkSync(databasePath);
         }
 
         await LocalStorage.setItem(values.name, JSON.stringify(values));
