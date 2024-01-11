@@ -1,8 +1,8 @@
 {
   "$schema": "https://www.raycast.com/schemas/extension.json",
-  "name": "docsearch",
-  "title": "Docsearch",
-  "description": "Semantic search for selected groups of documents.",
+  "name": "pdfsearch",
+  "title": "PDFSearch",
+  "description": "Perform semantic search across collections of PDF documents.",
   "icon": "command-icon.png",
   "author": "kevin-pek",
   "categories": [
