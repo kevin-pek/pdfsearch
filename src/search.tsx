@@ -43,6 +43,7 @@ export default function Command(props: LaunchProps<{ arguments: Arguments.Search
       await chmod(command, "755");
       const process = execa(command, [databasePath, query]);
       searchProcess.current = process;
+
       try {
         const { stdout, exitCode } = await process;
         setIsQuerying(false);
@@ -54,8 +55,9 @@ export default function Command(props: LaunchProps<{ arguments: Arguments.Search
           showFailureToast("Error when parsing " + collectionName);
         }
       } catch (err) {
-        showFailureToast(err);
+        // catch process cancellation that is triggered when query changes
       }
+
       return documents.sort((a, b) => b.score - a.score);
     },
     [collectionName],
