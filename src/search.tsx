@@ -15,7 +15,7 @@ export default function Command(props: LaunchProps<{ arguments: Arguments.Search
   const [isQuerying, setIsQuerying] = useState(false);
   const [results, setResults] = useState<(Document & { id: number })[]>([]);
   const [query, setQuery] = useState("");
-  const searchProcess = useRef<ExecaChildProcess<string>>();
+  const searchProcess = useRef<ExecaChildProcess<string> | null>(null);
 
   const { data: collectionName, isLoading } = usePromise(async () => {
     const index = (await LocalStorage.getItem(props.arguments.collection)) as string | undefined;
@@ -36,9 +36,6 @@ export default function Command(props: LaunchProps<{ arguments: Arguments.Search
     async (query: string) => {
       if (!collectionName) return [];
       const documents: (Document & { id: number })[] = [];
-      if (searchProcess.current) {
-        searchProcess.current.cancel()
-      }
       setIsQuerying(true);
       // execute swift bianry that will load saved database
       const command = path.join(environment.assetsPath, "SearchIndex");
@@ -92,12 +89,15 @@ export default function Command(props: LaunchProps<{ arguments: Arguments.Search
 
   // search and update results for the search query everytime the query changes
   useEffect(() => {
+    // terminate existing search process
+    if (searchProcess.current) {
+      searchProcess.current.cancel();
+      searchProcess.current = null;
+    }
+
     if (!query) {
       // if search query becomes empty, terminate all ongoing searches
       setResults([]);
-      if (searchProcess.current) {
-        searchProcess.current.cancel()
-      }
       setIsQuerying(false);
     } else if (collectionName) {
       const handleSearch = async () => {
@@ -113,6 +113,7 @@ export default function Command(props: LaunchProps<{ arguments: Arguments.Search
     return () => {
       if (searchProcess.current) {
         searchProcess.current.cancel()
+        searchProcess.current = null
       }
     };
   }, []);
