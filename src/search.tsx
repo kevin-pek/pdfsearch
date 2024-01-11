@@ -15,16 +15,9 @@ export default function Command(props: LaunchProps<{ arguments: Arguments.Search
   const [isQuerying, setIsQuerying] = useState(false);
   const [results, setResults] = useState<(Document & { id: number })[]>([]);
   const [query, setQuery] = useState("");
-  const processes = useRef<ExecaChildProcess<string>[]>([]);
+  const searchProcess = useRef<ExecaChildProcess<string>>();
 
-  const terminateAllProcesses = () => {
-    processes.current.forEach((proc) => {
-      if (proc) proc.cancel();
-    });
-    processes.current = [];
-  };
-
-  const { data: files, isLoading } = usePromise(async () => {
+  const { data: collectionName, isLoading } = usePromise(async () => {
     const index = (await LocalStorage.getItem(props.arguments.collection)) as string | undefined;
     if (!index) {
       showFailureToast(`Couldn't find collection ${props.arguments.collection}!`);
@@ -36,44 +29,39 @@ export default function Command(props: LaunchProps<{ arguments: Arguments.Search
       title: "Loaded",
       message: `Loaded collection ${props.arguments.collection}`,
     });
-    return collection.files || [];
+    return collection.name || "";
   });
 
   const searchFiles = useCallback(
     async (query: string) => {
-      if (!files) return [];
+      if (!collectionName) return [];
       const documents: (Document & { id: number })[] = [];
-      terminateAllProcesses();
+      if (searchProcess.current) {
+        searchProcess.current.cancel()
+      }
       setIsQuerying(true);
-      await Promise.allSettled(
-        files.map(async (file) => {
-          // execute swift bianry that will load given filepath and return tokens
-          const command = path.join(environment.assetsPath, "DocumentIndexer");
-          await chmod(command, "755");
-          const process = execa(command, [file, query]);
-          processes.current.push(process);
-
-          try {
-            const { stdout, exitCode } = await process;
-            processes.current = processes.current.filter((p) => p !== process);
-            setIsQuerying(processes.current.length !== 0);
-            if (exitCode == 0) {
-              for (const { content, page, file, id, score } of JSON.parse(stdout)) {
-                documents.push({ content, page, file, id, score });
-              }
-            } else {
-              showFailureToast("Error when parsing " + file);
-              // console.log("Error when parsing " + file);
-            }
-          } catch (err) {
-            showFailureToast(err);
-            // console.log("Cancelled or failed process for file: " + err)
+      // execute swift bianry that will load saved database
+      const command = path.join(environment.assetsPath, "SearchIndex");
+      const databasePath = path.join(environment.supportPath, `${collectionName}.sqlite`);
+      await chmod(command, "755");
+      const process = execa(command, [databasePath, query]);
+      searchProcess.current = process
+      try {
+        const { stdout, exitCode } = await process;
+        setIsQuerying(false);
+        if (exitCode == 0) {
+          for (const { content, page, file, id, score } of JSON.parse(stdout)) {
+            documents.push({ content, page, file, id, score });
           }
-        }),
-      );
+        } else {
+          showFailureToast("Error when parsing " + collectionName);
+        }
+      } catch (err) {
+        showFailureToast(err);
+      }
       return documents.sort((a, b) => b.score - a.score);
     },
-    [files],
+    [collectionName],
   );
 
   const openFile = async (filepath: string, page: number) => {
@@ -107,9 +95,11 @@ export default function Command(props: LaunchProps<{ arguments: Arguments.Search
     if (!query) {
       // if search query becomes empty, terminate all ongoing searches
       setResults([]);
-      terminateAllProcesses();
+      if (searchProcess.current) {
+        searchProcess.current.cancel()
+      }
       setIsQuerying(false);
-    } else if (files) {
+    } else if (collectionName) {
       const handleSearch = async () => {
         const documents = await searchFiles(query);
         setResults(documents);
@@ -121,7 +111,9 @@ export default function Command(props: LaunchProps<{ arguments: Arguments.Search
   // Clean up running processes when component unmounts
   useEffect(() => {
     return () => {
-      terminateAllProcesses();
+      if (searchProcess.current) {
+        searchProcess.current.cancel()
+      }
     };
   }, []);
 
@@ -133,7 +125,7 @@ export default function Command(props: LaunchProps<{ arguments: Arguments.Search
       throttle
       isShowingDetail
     >
-      {files ? (
+      {collectionName ? (
         <List.Section title="Results" subtitle={results.length + ""}>
           {results.map((result) => (
             <List.Item

@@ -11,6 +11,7 @@ import {
   Icon,
   Color,
   confirmAlert,
+  environment,
 } from "@raycast/api";
 import { useState } from "react";
 import Search from "./search";
@@ -18,6 +19,8 @@ import { showFailureToast, usePromise } from "@raycast/utils";
 import { Collection } from "./type";
 import fs, { lstatSync, readdirSync } from "fs";
 import path from "path";
+import { execa } from "execa";
+import { chmod } from "fs/promises";
 
 export default function Command() {
   const [searchText, setSearchText] = useState<string>("");
@@ -38,6 +41,11 @@ export default function Command() {
         style: Alert.ActionStyle.Destructive,
         title: "Delete Collection",
         onAction: () => {
+          // delete sqlite database file
+          const databasePath = path.join(environment.supportPath, `${name}.sqlite`);
+          fs.unlinkSync(databasePath);
+
+          // remove record of collection
           LocalStorage.removeItem(name);
           revalidate();
           showToast({ title: "Success", message: `Successfully deleted collection ${name}!` });
@@ -170,11 +178,22 @@ function CreateCollectionForm(props: {
         values.files = files;
 
         // if editing a collection and name changes, we delete the old collection
-        if (props.collection && props.collection.name !== values.name)
+        if (props.collection && props.collection.name !== values.name) {
           await LocalStorage.removeItem(props.collection.name);
+          // delete sqlite database file
+          const databasePath = path.join(environment.supportPath, `${props.collection.name}.sqlite`);
+          console.log(databasePath)
+          fs.unlinkSync(databasePath)
+        }
 
         await LocalStorage.setItem(values.name, JSON.stringify(values));
-        showToast({ title: "Success", message: "Files added to collection successfully!" });
+        // execute swift binary that will build the index for the collection of files
+        const command = path.join(environment.assetsPath, "IndexDocument");
+        const databasePath = path.join(environment.supportPath, `${values.name}.sqlite`);
+        await chmod(command, "755");
+        execa(command, [databasePath, ...files]);
+
+        showToast({ title: "Success", message: "Indexing files! This will take a while..." });
       } catch (err) {
         showFailureToast(err);
       }

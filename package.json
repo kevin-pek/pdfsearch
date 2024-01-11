@@ -47,7 +47,7 @@
   },
   "scripts": {
     "build": "ray build -e dist",
-    "build-swift": "swift build --configuration=release --arch arm64 && cp .build/arm64-apple-macosx/release/DocumentIndexer assets && cp Sources/DocumentIndexer/Resources/vocab.txt assets",
+    "build-swift": "swift build --configuration=release --arch arm64 && cp .build/arm64-apple-macosx/release/SearchIndex assets && cp .build/arm64-apple-macosx/release/IndexDocument assets && cp Sources/VectorStore/Resources/vocab.txt assets",
     "dev": "ray develop",
     "fix-lint": "ray lint --fix",
     "lint": "ray lint",

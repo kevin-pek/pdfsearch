@@ -4,18 +4,25 @@
 import PackageDescription
 
 let package = Package(
-    name: "DocumentIndexer",
+    name: "DocumentSearcher",
     platforms: [
         .macOS(.v12)
+    ],
+    products: [
+        .executable(name: "IndexDocument", targets: ["IndexDocument"]),
+        .executable(name: "SearchIndex", targets: ["SearchIndex"]),
+        .library(name: "VectorStore", targets: ["VectorStore"])
     ],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.
         // Targets can depend on other targets in this package and products from dependencies.
-        .executableTarget(
-            name: "DocumentIndexer",
+        .executableTarget(name: "IndexDocument", dependencies: ["VectorStore"]),
+        .executableTarget(name: "SearchIndex", dependencies: ["VectorStore"]),
+        .target(
+            name: "VectorStore",
             resources: [
-                .copy("Resources/vocab.txt"),
-                .copy("Resources/EmbeddingModel.mlmodelc")
+                .copy("Resources/EmbeddingModel.mlmodelc"),
+                .process("Resources/vocab.txt")
             ]
         )
     ]
