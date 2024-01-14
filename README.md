@@ -2,6 +2,8 @@
 
 Raycast extension for performing search across groups of selected PDF documents. Currently it uses PDFKit to separate pdf files into their paragraphs. It then uses [Jina AI's small embedding model](https://huggingface.co/jinaai/jina-embeddings-v2-small-en) to encode the documents, and dot product similarity is used to get the most relevant documents defined in the collection.
 
+![Manage Collections](metadata/pdfsearch-1.png)
+
 ## Define Collection
 
 Create a collection by naming and selecting a group of PDF files/directories from finder, which can also be removed from the menu. These files will be parsed and encoded using a tokeniser, and the embeddings will be stored in a SQLite database in the support directory. Note that this process can range from seconds to minutes depending on how large the files in the collection are.
@@ -16,9 +18,8 @@ When a collection selected, you will be brought to a page where you can enter yo
 
 - [x] Ability to handle large file sizes without exceeding memory limit.
 - [x] Open documents to exact page where match was found.
-- [ ] Improve PDF parsing logic.
 - [x] Store embeddings into memory for faster retrieval.
-- [ ] Hybrid search by using combination of BM25 with semantic re-rankers.
+- [ ] Improve PDF parsing logic.
 
 ## Getting Started
 
