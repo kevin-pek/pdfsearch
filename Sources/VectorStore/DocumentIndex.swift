@@ -34,7 +34,7 @@ public class DocumentIndex {
     public func indexDocument(atPath filePath: String) throws {
         if let pdfDoc = PDFDocument(url: URL(fileURLWithPath: filePath)) {
             var documents = [Document]()
-            let tokenizer = NLTokenizer(unit: .paragraph)
+            let tokenizer = NLTokenizer(unit: .document)
 
             for pageIndex in 0..<pdfDoc.pageCount {
                 guard let page = pdfDoc.page(at: pageIndex), let pageContent = page.string else { continue }
