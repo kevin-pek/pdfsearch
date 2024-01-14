@@ -1,0 +1,96 @@
+[
+  {
+    "metadataOutputVersion" : "3.0",
+    "shortDescription" : "jina-embeddings-v2-small-en-airgap (feature-extraction)",
+    "outputSchema" : [
+      {
+        "hasShapeFlexibility" : "0",
+        "isOptional" : "0",
+        "dataType" : "Float32",
+        "formattedType" : "MultiArray (Float32 1 × 128 × 512)",
+        "shortDescription" : "Sequence of hidden-states at the output of the last layer of the model",
+        "shape" : "[1, 128, 512]",
+        "name" : "last_hidden_state",
+        "type" : "MultiArray"
+      },
+      {
+        "hasShapeFlexibility" : "0",
+        "isOptional" : "0",
+        "dataType" : "Float32",
+        "formattedType" : "MultiArray (Float32 1 × 512)",
+        "shortDescription" : "Last layer hidden-state of the first token of the sequence",
+        "shape" : "[1, 512]",
+        "name" : "pooler_output",
+        "type" : "MultiArray"
+      }
+    ],
+    "storagePrecision" : "Float32",
+    "modelParameters" : [
+
+    ],
+    "specificationVersion" : 6,
+    "mlProgramOperationTypeHistogram" : {
+      "Linear" : 25,
+      "Gelu" : 4,
+      "LayerNorm" : 9,
+      "SliceByIndex" : 9,
+      "Matmul" : 8,
+      "Sub" : 1,
+      "Tanh" : 1,
+      "Transpose" : 16,
+      "Softmax" : 4,
+      "Mul" : 9,
+      "Cast" : 1,
+      "Reshape" : 16,
+      "Add" : 17,
+      "ExpandDims" : 2,
+      "Gather" : 1
+    },
+    "computePrecision" : "Mixed (Int32, Float32)",
+    "isUpdatable" : "0",
+    "availability" : {
+      "macOS" : "12.0",
+      "tvOS" : "15.0",
+      "watchOS" : "8.0",
+      "iOS" : "15.0",
+      "macCatalyst" : "15.0"
+    },
+    "modelType" : {
+      "name" : "MLModelType_mlProgram"
+    },
+    "userDefinedMetadata" : {
+      "co.huggingface.exporters.precision" : "float32",
+      "com.github.apple.coremltools.version" : "7.0",
+      "transformers_version" : "4.26.0",
+      "com.github.apple.coremltools.source" : "torch==2.0.0",
+      "co.huggingface.exporters.name" : "jina-embeddings-v2-small-en-airgap",
+      "co.huggingface.exporters.framework" : "pytorch",
+      "co.huggingface.exporters.architecture" : "JinaBertForMaskedLM",
+      "co.huggingface.exporters.task" : "feature-extraction"
+    },
+    "inputSchema" : [
+      {
+        "hasShapeFlexibility" : "0",
+        "isOptional" : "0",
+        "dataType" : "Int32",
+        "formattedType" : "MultiArray (Int32 1 × 128)",
+        "shortDescription" : "Indices of input sequence tokens in the vocabulary",
+        "shape" : "[1, 128]",
+        "name" : "input_ids",
+        "type" : "MultiArray"
+      },
+      {
+        "hasShapeFlexibility" : "0",
+        "isOptional" : "0",
+        "dataType" : "Int32",
+        "formattedType" : "MultiArray (Int32 1 × 128)",
+        "shortDescription" : "Mask to avoid performing attention on padding token indices (1 = not masked, 0 = masked)",
+        "shape" : "[1, 128]",
+        "name" : "attention_mask",
+        "type" : "MultiArray"
+      }
+    ],
+    "generatedClassName" : "EmbeddingModel",
+    "method" : "predict"
+  }
+]
