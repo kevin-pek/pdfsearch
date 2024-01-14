@@ -1,4 +1,4 @@
-# Docsearch
+# PDFSearch
 
 Raycast extension for performing search across groups of selected PDF documents. Currently it uses PDFKit to separate pdf files into their paragraphs. It then uses [Jina AI's small embedding model](https://huggingface.co/jinaai/jina-embeddings-v2-small-en) to encode the documents, and dot product similarity is used to get the most relevant documents defined in the collection.
 
