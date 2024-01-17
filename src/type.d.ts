@@ -9,4 +9,6 @@ export type Document = {
   page: number;
   file: string;
   score: number;
+  lower: number;
+  upper: number;
 };
