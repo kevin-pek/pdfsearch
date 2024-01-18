@@ -10,5 +10,6 @@ let package = Package(
     ],
     targets: [
         .executableTarget(name: "SearchDocument"),
+        .executableTarget(name: "DrawImage")
     ]
 )
