@@ -73,12 +73,7 @@ export default function Command() {
                 subtitle={data[key].description}
                 actions={
                   <ActionPanel>
-                    <Action.Push
-                      title="Search"
-                      target={
-                        <Search collectionName={data[key].name} />
-                      }
-                    />
+                    <Action.Push title="Search" target={<Search collectionName={data[key].name} />} />
                     <Action.Push
                       title="Edit Collection"
                       target={<CreateCollectionForm collection={data[key]} revalidate={revalidate} />}

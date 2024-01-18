@@ -47,11 +47,12 @@ for filePath in filePaths {
         let (paragraphText, paragraphRange) = extractParagraphContaining(selection: selection, in: pdfDocument)
         let similarityScore = calculateSimilarity(query: searchQuery, text: paragraphText)
         if let page = selection.pages.first {
-            let pageNumber = pdfDocument.index(for: page) + 1 // Adding 1 because index is zero-based
-            let identifier = UniqueIdentifier(page: pageNumber, lowerBound: paragraphRange.lowerBound, upperBound: paragraphRange.upperBound)
+            let pageIndex = pdfDocument.index(for: page)
+
+            let identifier = UniqueIdentifier(page: pageIndex, lowerBound: paragraphRange.lowerBound, upperBound: paragraphRange.upperBound)
 
             if !uniqueIdentifiers.contains(identifier) {
-                let document = Document(content: paragraphText, page: pageNumber, file: filePath, score: similarityScore, lower: paragraphRange.lowerBound, upper: paragraphRange.upperBound, id: nextDocumentID)
+                let document = Document(content: paragraphText, page: pageIndex, file: filePath, score: similarityScore, lower: paragraphRange.lowerBound, upper: paragraphRange.upperBound, id: nextDocumentID)
                 nextDocumentID += 1
                 rankedResults.append(document)
                 uniqueIdentifiers.insert(identifier)

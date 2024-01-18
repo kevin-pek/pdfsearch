@@ -5,6 +5,7 @@ export type Collection = {
 };
 
 export type Document = {
+  id: number;
   content: string;
   page: number;
   file: string;

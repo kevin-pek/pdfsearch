@@ -13,7 +13,7 @@ export default function SearchCollection(props: { collectionName: string }) {
     return;
   }
   const [isQuerying, setIsQuerying] = useState(false);
-  const [results, setResults] = useState<(Document & { id: number })[]>([]);
+  const [results, setResults] = useState<Document[]>([]);
   const [query, setQuery] = useState("");
   const searchProcess = useRef<ExecaChildProcess<string> | null>(null);
 
@@ -35,11 +35,10 @@ export default function SearchCollection(props: { collectionName: string }) {
   const searchFiles = useCallback(
     async (query: string) => {
       if (!collection) return [];
-      const documents: (Document & { id: number })[] = [];
+      const documents: Document[] = [];
       setIsQuerying(true);
-      // execute swift bianry that will load saved database
+      // execute swift binary that will load saved database
       const command = path.join(environment.assetsPath, "SearchDocument");
-      // const databasePath = path.join(environment.supportPath, `${collection.name}.sqlite`);
       await chmod(command, "755");
       const process = execa(command, [query, ...collection.files]);
       searchProcess.current = process;
@@ -58,7 +57,7 @@ export default function SearchCollection(props: { collectionName: string }) {
         // catch process cancellation exception that is triggered when query changes
       }
 
-      return documents//.sort((a, b) => b.score - a.score);
+      return documents.sort((a, b) => b.score - a.score);
     },
     [collection],
   );
@@ -131,11 +130,46 @@ export default function SearchCollection(props: { collectionName: string }) {
                   <Action.ShowInFinder path={result.file} shortcut={{ modifiers: ["cmd", "shift"], key: "enter" }} />
                 </ActionPanel>
               }
-              detail={<List.Item.Detail markdown={result.content} />}
+              detail={<Detail document={result} />}
             />
           ))}
         </List.Section>
       ) : null}
     </List>
   );
+}
+
+function Detail({ document }: { document: Document }) {
+  const drawProcess = useRef<ExecaChildProcess>();
+  const [imagePath, setImagePath] = useState<string>("");
+
+  useEffect(() => {
+    const createImage = async () => {
+      // execute swift binary that will load saved database
+      const command = path.join(environment.assetsPath, "DrawImage");
+      await chmod(command, "755");
+      const process = execa(command, [
+        document.file,
+        document.page.toString(),
+        document.lower.toString(),
+        document.upper.toString(),
+      ]);
+      drawProcess.current = process;
+
+      try {
+        const { stdout, exitCode } = await process;
+        if (exitCode === 0) {
+          setImagePath(stdout);
+        }
+      } catch {
+        //
+      }
+    };
+
+    createImage();
+
+    return () => drawProcess.current?.cancel();
+  }, []);
+
+  return <List.Item.Detail isLoading={imagePath === ""} markdown={`![Image Preview](${imagePath})`} />;
 }
