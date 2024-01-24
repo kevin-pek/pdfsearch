@@ -35,13 +35,9 @@ export function CreateCollectionForm(props: {
   function revalidateFiles() {
     if (files.length === 0) {
       setFileError("Add at least 1 file!");
-<<<<<<< HEAD
-    } else if (!files.every(file => lstatSync(file).isDirectory() || supportedFiletypes.includes(path.extname(file)))) {
-=======
     } else if (
       !files.every((file) => lstatSync(file).isDirectory() || supportedFiletypes.includes(path.extname(file)))
     ) {
->>>>>>> contributions/merge-1706021455969723000
       // check if there are any individually added files that are not supported
       setFileError("Unsupported file type detected!");
     } else if (fileError) {
@@ -67,32 +63,19 @@ export function CreateCollectionForm(props: {
   };
 
   useEffect(() => {
-<<<<<<< HEAD
-    revalidateName()
-  }, [name])
-
-  useEffect(() => {
-    revalidateFiles()
-  }, [files])
-=======
     revalidateName();
   }, [name]);
 
   useEffect(() => {
     revalidateFiles();
   }, [files]);
->>>>>>> contributions/merge-1706021455969723000
 
   const handleSubmit = async (values: Collection) => {
     if (!fileError && !nameError) {
       try {
         // load array of unique supported files from files and directories
         let validFiles: string[] = [];
-<<<<<<< HEAD
-        values.files.forEach(file => {
-=======
         values.files.forEach((file) => {
->>>>>>> contributions/merge-1706021455969723000
           if (lstatSync(file).isDirectory()) {
             validFiles = validFiles.concat(loadDir(file));
           } else if (supportedFiletypes.includes(path.extname(file))) {

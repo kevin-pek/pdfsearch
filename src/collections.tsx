@@ -1,18 +1,4 @@
-<<<<<<< HEAD
-import {
-  ActionPanel,
-  Action,
-  List,
-  LocalStorage,
-  showToast,
-  Alert,
-  Icon,
-  Color,
-  confirmAlert,
-} from "@raycast/api";
-=======
 import { ActionPanel, Action, List, LocalStorage, showToast, Alert, Icon, Color, confirmAlert } from "@raycast/api";
->>>>>>> contributions/merge-1706021455969723000
 import { useState } from "react";
 import Search from "./views/search";
 import { usePromise } from "@raycast/utils";
