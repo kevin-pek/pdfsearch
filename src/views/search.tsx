@@ -67,7 +67,7 @@ export default function SearchCollection(props: { collectionName: string }) {
     delay 1
     tell application "System Events"
         keystroke "g" using {option down, command down}
-        keystroke "${page}"
+        keystroke "${page + 1}"
         keystroke return
     end tell
     `;
