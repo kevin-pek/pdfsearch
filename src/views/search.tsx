@@ -6,6 +6,7 @@ import { chmod } from "fs/promises";
 import { ExecaChildProcess, execa } from "execa";
 import path from "path";
 import { Collection, Document } from "../type";
+import { getValidFiles } from "../util";
 
 export default function SearchCollection(props: { collectionName: string }) {
   if (!props.collectionName) {
@@ -24,6 +25,13 @@ export default function SearchCollection(props: { collectionName: string }) {
       throw new Error(`Failed to get collection ${props.collectionName}!`);
     }
     const collection = JSON.parse(index) as Collection;
+    const validFiles = getValidFiles(collection.files);
+    if (validFiles.length === 0) {
+      showFailureToast("No supported files found!");
+      return;
+    }
+    collection.files = validFiles;
+
     showToast({
       style: Toast.Style.Success,
       title: "Loaded",
