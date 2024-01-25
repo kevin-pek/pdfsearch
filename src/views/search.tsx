@@ -22,8 +22,9 @@ export default function SearchCollection(props: { collectionName: string }) {
     const index = (await LocalStorage.getItem(props.collectionName)) as string | undefined;
     if (!index) {
       showFailureToast(`Couldn't find collection ${props.collectionName}!`);
-      throw new Error(`Failed to get collection ${props.collectionName}!`);
+      return;
     }
+
     const collection = JSON.parse(index) as Collection;
     const validFiles = getValidFiles(collection.files);
     if (validFiles.length === 0) {
@@ -37,7 +38,7 @@ export default function SearchCollection(props: { collectionName: string }) {
       title: "Loaded",
       message: `Loaded collection ${props.collectionName}`,
     });
-    return collection || {};
+    return collection;
   });
 
   const searchFiles = useCallback(
