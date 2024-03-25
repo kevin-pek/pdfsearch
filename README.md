@@ -15,8 +15,3 @@ Create a collection by naming and selecting a group of PDF files/directories fro
 When a collection selected, you will be brought to a page where you can enter your search query, which will be used to search all files within the collection. Selecting any of the results will open the PDF document and navigate to the page that contains the query at the location that matches. You can also preview the document using quick look, or show the file in finder.
 
 ![Search Collection](metadata/pdfsearch-3.png)
-
-## Roadmap
-
-- [ ] Improve search speed.
-- [ ] Use ContextualEmbeddings to perform similarity search.
