@@ -18,8 +18,8 @@
     },
     {
       "name": "open",
-      "title": "Open PDF File",
-      "description": "Open a single PDF file.",
+      "title": "View PDF Outline",
+      "description": "View outline for a single PDF file.",
       "mode": "view"
     }
   ],
