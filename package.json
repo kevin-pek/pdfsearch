@@ -18,7 +18,7 @@
     },
     {
       "name": "open",
-      "title": "View PDF Outline",
+      "title": "View Outline",
       "description": "View outline for a single PDF file.",
       "mode": "view"
     }
