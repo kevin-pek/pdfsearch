@@ -22,7 +22,7 @@ export default function Command() {
   });
 
   return (
-    <List isLoading={isLoading} searchBarPlaceholder="Search PDF outline..." isShowingDetail throttle>
+    <List isLoading={isLoading} searchBarPlaceholder="Search PDF outline..." isShowingDetail>
       {data?.outlines?.map((outline, i) => (
         <List.Item
           key={i}
