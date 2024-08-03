@@ -4,15 +4,13 @@
 import PackageDescription
 
 let package = Package(
-    name: "parse-file",
+    name: "DocumentSearcher",
     platforms: [
-        .macOS(.v10_15)
+        .macOS(.v11)
     ],
     targets: [
-        // Targets are the basic building blocks of a package, defining a module or a test suite.
-        // Targets can depend on other targets in this package and products from dependencies.
-        .executableTarget(
-            name: "parse-file",
-            path: "Sources"),
+        .executableTarget(name: "SearchDocument"),
+        .executableTarget(name: "DrawImage"),
+        .executableTarget(name: "GetOutline")
     ]
 )

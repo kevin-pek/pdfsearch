@@ -1,8 +1,8 @@
 {
   "$schema": "https://www.raycast.com/schemas/extension.json",
-  "name": "docsearch",
-  "title": "Docsearch",
-  "description": "Semantic search for selected groups of documents.",
+  "name": "pdfsearch",
+  "title": "PDFSearch",
+  "description": "Search across collections of PDF documents.",
   "icon": "command-icon.png",
   "author": "kevin-pek",
   "categories": [
@@ -12,31 +12,21 @@
   "commands": [
     {
       "name": "collections",
-      "title": "Manage Collections",
-      "description": "View list of current collections.",
+      "title": "Collections",
+      "description": "View list of document collections.",
       "mode": "view"
     },
     {
-      "name": "search",
-      "title": "Search Collection",
-      "description": "Search the current collection.",
-      "mode": "view",
-      "arguments": [
-        {
-          "name": "collection",
-          "placeholder": "collection",
-          "type": "text",
-          "required": true
-        }
-      ]
+      "name": "open",
+      "title": "View Outline",
+      "description": "View outline for a single PDF file.",
+      "mode": "view"
     }
   ],
   "dependencies": {
     "@raycast/api": "^1.63.0",
     "@raycast/utils": "^1.4.8",
-    "execa": "^8.0.1",
-    "wink-bm25-text-search": "^3.1.2",
-    "wink-nlp-utils": "^2.1.0"
+    "execa": "^8.0.1"
   },
   "devDependencies": {
     "@raycast/eslint-config": "^1.0.6",
@@ -49,7 +39,7 @@
   },
   "scripts": {
     "build": "ray build -e dist",
-    "build-swift": "swift build --configuration=release --arch arm64 && mv .build/arm64-apple-macosx/release/parse-file assets",
+    "build-swift": "swift build --configuration=release --arch arm64 --arch x86_64 && cp .build/apple/Products/Release/GetOutline assets && cp .build/apple/Products/Release/SearchDocument assets && cp .build/apple/Products/Release/DrawImage assets",
     "dev": "ray develop",
     "fix-lint": "ray lint --fix",
     "lint": "ray lint",
