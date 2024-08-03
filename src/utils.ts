@@ -61,3 +61,4 @@ return POSIX path of selectedFile
 };
 
 export const cache = new Cache();
+
