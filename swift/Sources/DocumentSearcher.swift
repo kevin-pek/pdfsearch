@@ -4,19 +4,14 @@ import Foundation
 import RaycastSwiftMacros
 import UniformTypeIdentifiers
 
-enum IndexingError: Error {
+enum IndexError: Error {
     case unableToOpenOrCreateIndex(String)
+    case invalidFileURL(String)
     case fileNotFound(String)
     case noPermissions(String)
     case failedToAddDocument(String)
-    case invalidURL(String)
-}
-
-enum CollectionError: Error {
-    case invalidSupportPath
-    case notADirectory
-    case fileDoesNotExist
     case deletionFailed(String)
+    case flushFailed(String)
 }
 
 /// Returned objects must be Encodable
@@ -41,17 +36,7 @@ struct SearchResult: Encodable {
 }
 
 enum SearchError: Error {
-    case unableToOpenIndex(String)
-    case flushFailed(String)
-    case noResults(String)
-    case resultParsing(String)
     case missingFile(String)
-}
-
-struct UniqueIdentifier: Hashable {
-    let page: Int
-    let lowerBound: Int
-    let upperBound: Int
 }
 
 let compatibleFileExtensions: Set<String> = [
@@ -95,7 +80,7 @@ func openIndex(_ collection: String, _ supportPath: String) -> SKIndex? {
 /// Called whenever user saves changes to either a new or existing collection. Triggers update or creating new index file depending on whether it is a new or existing collection.
 @raycast func createOrUpdateCollection(collectionName: String, supportPath: String, filepaths: [String]) throws -> IndexResult {
     guard let index = createOrOpenIndex(collectionName, supportPath) else {
-        throw IndexingError.unableToOpenOrCreateIndex("Unable to open or create new index file for collection \(collectionName).")
+        throw IndexError.unableToOpenOrCreateIndex("Unable to open or create new index file for collection \(collectionName).")
     }
     var messages = [String]()
     var files = [String]()
@@ -108,21 +93,21 @@ func openIndex(_ collection: String, _ supportPath: String) -> SKIndex? {
     for filepath in filepaths {
         let documentURL = URL(fileURLWithPath: filepath)
         if !documentURL.isFileURL {
-            throw IndexingError.invalidURL("Not file URL: \(documentURL.path).")
+            throw IndexError.invalidFileURL("Not file URL: \(documentURL.path).")
         }
 
         if !FileManager.default.fileExists(atPath: filepath) {
-            throw IndexingError.fileNotFound("File does not exist: \(documentURL.path)")
+            throw IndexError.fileNotFound("File does not exist: \(documentURL.path)")
         }
 
         if !FileManager.default.isReadableFile(atPath: filepath) {
-            throw IndexingError.noPermissions("No read permissions for file: \(documentURL.path)")
+            throw IndexError.noPermissions("No read permissions for file: \(documentURL.path)")
         }
 
         let pathExtension = documentURL.pathExtension.lowercased()
         if pathExtension == "pdf" {
             guard let pdfDocument = PDFDocument(url: documentURL) else {
-                throw IndexingError.failedToAddDocument("Failed to load pdf docuemnt.")
+                throw IndexError.failedToAddDocument("Failed to load pdf docuemnt.")
             }
 
             // Create smaller documents for each page in the PDF document
@@ -168,7 +153,7 @@ func openIndex(_ collection: String, _ supportPath: String) -> SKIndex? {
     group.wait()
 
     guard SKIndexFlush(index) else {
-        throw IndexingError.failedToAddDocument("Error occurred while saving changes to index.")
+        throw IndexError.flushFailed("Error occurred while saving changes to index.")
     }
 
     return IndexResult(messages: messages, indexedFiles: files)
@@ -198,12 +183,12 @@ func extractFilePathAndPageNumber(from url: URL) -> (filepath: String, pageIndex
 
 @raycast func searchCollection(query: String, collectionName: String, supportPath: String) throws -> [Document] {
     guard let index = openIndex(collectionName, supportPath) else {
-        throw SearchError.unableToOpenIndex("Index \(collectionName) does not exist.")
+        throw IndexError.unableToOpenOrCreateIndex("Index \(collectionName) does not exist.")
     }
 
     // Flush the index to make sure all documents have been added
     guard SKIndexFlush(index) else {
-        throw SearchError.flushFailed("Error occurred while saving changes to index.")
+        throw IndexError.flushFailed("Error occurred while saving changes to index.")
     }
 
     let options = SKSearchOptions(kSKSearchOptionFindSimilar) // find purely based on similarity instead of boolean query
@@ -275,11 +260,11 @@ func extractFilePathAndPageNumber(from url: URL) -> (filepath: String, pageIndex
 @raycast func deleteCollection(collectionName: String, supportPath: String) throws -> Void {
     let supportDirectoryURL = URL(fileURLWithPath: supportPath)
     if !isDirectory(url: supportDirectoryURL) {
-        throw CollectionError.deletionFailed("Invalid support directory \(supportPath)")
+        throw IndexError.deletionFailed("Invalid support directory \(supportPath)")
     }
     let indexURL = supportDirectoryURL.appendingPathComponent("\(collectionName).index")
     guard FileManager.default.fileExists(atPath: indexURL.path) else {
-        throw CollectionError.deletionFailed("Index file for collection not found \(indexURL.path)")
+        throw IndexError.deletionFailed("Index file for collection not found \(indexURL.path)")
     }
     try FileManager.default.removeItem(at: indexURL)
 }
