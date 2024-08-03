@@ -32,6 +32,7 @@ struct Document: Encodable {
 
 struct IndexResult: Encodable {
     let messages: [String]
+    let indexedFiles: [String]
 }
 
 struct SearchResult: Encodable {
@@ -53,22 +54,10 @@ struct UniqueIdentifier: Hashable {
     let upperBound: Int
 }
 
-let compatibleMimeTypes: Set<String> = [
-    "text/plain",
-    "text/rtf",
-    "text/markdown",
-    "application/pdf",
-    "application/msword",
+let compatibleFileExtensions: Set<String> = [
+    "txt",
+    "md",
 ]
-
-func getMimeType(url: URL) -> CFString? {
-    let pathExtension = url.pathExtension
-    if let uti = UTType(filenameExtension: pathExtension),
-       let mimeType = uti.preferredMIMEType {
-        return mimeType as CFString
-    }
-    return nil
-}
 
 func isDirectory(url: URL) -> Bool {
     var isDir: ObjCBool = false
@@ -109,6 +98,7 @@ func openIndex(_ collection: String, _ supportPath: String) -> SKIndex? {
         throw IndexingError.unableToOpenOrCreateIndex("Unable to open or create new index file for collection \(collectionName).")
     }
     var messages = [String]()
+    var files = [String]()
 
     let queue = DispatchQueue.global(qos: .userInitiated)
     let group = DispatchGroup()
@@ -129,26 +119,49 @@ func openIndex(_ collection: String, _ supportPath: String) -> SKIndex? {
             throw IndexingError.noPermissions("No read permissions for file: \(documentURL.path)")
         }
 
-        // TODO: Handle other document types
-        let mimeType = getMimeType(url: documentURL)
+        let pathExtension = documentURL.pathExtension.lowercased()
+        if pathExtension == "pdf" {
+            guard let pdfDocument = PDFDocument(url: documentURL) else {
+                throw IndexingError.failedToAddDocument("Failed to load pdf docuemnt.")
+            }
 
-        guard let pdfDocument = PDFDocument(url: documentURL) else {
-            throw IndexingError.failedToAddDocument("Failed to load pdf docuemnt.")
-        }
-
-        // Create smaller documents for each page in the PDF document
-        for i in 0..<pdfDocument.pageCount {
-            group.enter()
-            queue.async {
-                defer { group.leave() }
-                if let page = pdfDocument.page(at: i), let text = page.string {
-                    let documentURL = URL(fileURLWithPath: "\(documentURL.path)_\(i)")
-                    let documentRef = SKDocumentCreateWithURL(documentURL as CFURL).takeRetainedValue()
-                    lock.lock()
-                    defer { lock.unlock() }
-                    SKIndexAddDocumentWithText(index, documentRef, text as CFString, true)
+            // Create smaller documents for each page in the PDF document
+            for i in 0..<pdfDocument.pageCount {
+                group.enter()
+                queue.async {
+                    defer { group.leave() }
+                    if let page = pdfDocument.page(at: i), let text = page.string {
+                        let documentURL = URL(fileURLWithPath: "\(documentURL.path)_\(i)")
+                        let documentRef = SKDocumentCreateWithURL(documentURL as CFURL).takeRetainedValue()
+                        lock.lock()
+                        defer { lock.unlock() }
+                        SKIndexAddDocumentWithText(index, documentRef, text as CFString, true)
+                    }
                 }
             }
+            files.append(documentURL.path)
+        } else if compatibleFileExtensions.contains(pathExtension) {
+            // treat other file types as plaintext files
+            group.enter()
+            queue.async {
+                defer {
+                    group.leave()
+                    lock.unlock()
+                }
+                var mimeTypeHint: CFString?
+                switch pathExtension {
+                case "txt":
+                    mimeTypeHint = "text/plain" as CFString
+                case "md":
+                    mimeTypeHint = "text/plain" as CFString
+                default:
+                    mimeTypeHint = nil
+                }
+                let documentRef = SKDocumentCreateWithURL(documentURL as CFURL).takeRetainedValue()
+                lock.lock()
+                SKIndexAddDocument(index, documentRef, mimeTypeHint, true)
+            }
+            files.append(documentURL.path)
         }
     }
 
@@ -158,7 +171,7 @@ func openIndex(_ collection: String, _ supportPath: String) -> SKIndex? {
         throw IndexingError.failedToAddDocument("Error occurred while saving changes to index.")
     }
 
-    return IndexResult(messages: messages)
+    return IndexResult(messages: messages, indexedFiles: files)
 }
 
 /// Extracts the file path and page number from a URL where the page number is assumed to be after the last underscore in the filename.
@@ -167,18 +180,18 @@ func openIndex(_ collection: String, _ supportPath: String) -> SKIndex? {
 func extractFilePathAndPageNumber(from url: URL) -> (filepath: String, pageIndex: Int)? {
     let fullpath = url.path
 
-    guard let filename = url.lastPathComponent.split(separator: "_").last else {
-        print("No underscore found in the filename.")
+    guard let pageIdxStr = url.lastPathComponent.split(separator: "_").last else {
+        // No underscore found in the filepath
         return nil
     }
 
     // Attempt to extract page number from the last part of the filename
-    if let pageIndex = Int(filename) {
+    if let pageIndex = Int(pageIdxStr) {
         // Build the file path excluding the page number
-        let filePathWithoutPageNumber = fullpath.dropLast(filename.count + 1)
+        let filePathWithoutPageNumber = fullpath.dropLast(pageIdxStr.count + 1)
         return (filepath: String(filePathWithoutPageNumber), pageIndex: pageIndex)
     } else {
-        print("The last part of the filename is not numeric.")
+        // Last part of filename is not numeric
         return nil
     }
 }
@@ -213,35 +226,35 @@ func extractFilePathAndPageNumber(from url: URL) -> (filepath: String, pageIndex
                 if let unmanagedURL = documentURLs[i] {
                     let score = scores[i]
                     let url = unmanagedURL.takeRetainedValue() as URL
-                    guard let (filepath, pageidx) = extractFilePathAndPageNumber(from: url) else {
-                        throw SearchError.resultParsing("Unable to extract file path and page index of result \(url).")
-                    }
+                    if let (filepath, pageidx) = extractFilePathAndPageNumber(from: url) {
+                        guard let pdfDocument = PDFDocument(url: URL(fileURLWithPath: filepath)) else {
+                            throw SearchError.missingFile("Failed to load pdf document.")
+                        }
 
-                    guard let pdfDocument = PDFDocument(url: URL(fileURLWithPath: filepath)) else {
-                        throw SearchError.missingFile("Failed to load pdf document.")
-                    }
-
-                    let selection = pdfDocument.findString(query, withOptions: [.caseInsensitive, NSString.CompareOptions .diacriticInsensitive]).first
-                    guard let content = pdfDocument.page(at: pageidx)?.string else {
-                        continue
-                    }
-                    let range = (content as NSString).range(of: query)
-                    if range.location != NSNotFound {
-                        returnDocuments.append(Document(
-                            id: documentIDs[i],
-                            page: pageidx,
-                            file: filepath,
-                            score: score,
-                            lower: range.location,
-                            upper: range.upperBound
-                        ))
+                        let selection = pdfDocument.findString(query, withOptions: [.caseInsensitive, NSString.CompareOptions .diacriticInsensitive]).first
+                        guard let content = pdfDocument.page(at: pageidx)?.string else {
+                            continue
+                        }
+                        let range = (content as NSString).range(of: query)
+                        if range.location != NSNotFound {
+                            returnDocuments.append(Document(
+                                id: documentIDs[i],
+                                page: pageidx,
+                                file: filepath,
+                                score: score,
+                                lower: range.location,
+                                upper: range.upperBound
+                            ))
+                        } else {
+                            returnDocuments.append(Document(
+                                id: documentIDs[i],
+                                page: pageidx,
+                                file: filepath,
+                                score: score
+                            ))
+                        }
                     } else {
-                        returnDocuments.append(Document(
-                            id: documentIDs[i],
-                            page: pageidx,
-                            file: filepath,
-                            score: score
-                        ))
+                        returnDocuments.append(Document(id: documentIDs[i], page: 0, file: url.path, score: score))
                     }
 
 //                    if let summary = SKSummaryCreateWithString(content as CFString)?.takeRetainedValue(),
@@ -262,11 +275,11 @@ func extractFilePathAndPageNumber(from url: URL) -> (filepath: String, pageIndex
 @raycast func deleteCollection(collectionName: String, supportPath: String) throws -> Void {
     let supportDirectoryURL = URL(fileURLWithPath: supportPath)
     if !isDirectory(url: supportDirectoryURL) {
-        throw CollectionError.notADirectory
+        throw CollectionError.deletionFailed("Invalid support directory \(supportPath)")
     }
     let indexURL = supportDirectoryURL.appendingPathComponent("\(collectionName).index")
     guard FileManager.default.fileExists(atPath: indexURL.path) else {
-        throw CollectionError.fileDoesNotExist
+        throw CollectionError.deletionFailed("Index file for collection not found \(indexURL.path)")
     }
     try FileManager.default.removeItem(at: indexURL)
 }
