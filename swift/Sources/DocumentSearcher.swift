@@ -200,6 +200,10 @@ func extractFilePathAndPageNumber(from url: URL) -> (filepath: String, pageIndex
     var numResults: CFIndex = 0
     let numSummarySentences: Int = 1
 
+    let lock = NSLock()
+    let queue = DispatchQueue.global(qos: .userInitiated)
+    let group = DispatchGroup()
+
     // Returns the search results by every k items until no results are left
     var hasMore = true
     repeat {
@@ -208,46 +212,49 @@ func extractFilePathAndPageNumber(from url: URL) -> (filepath: String, pageIndex
             var documentURLs = UnsafeMutablePointer<Unmanaged<CFURL>?>.allocate(capacity: numResults)
             SKIndexCopyDocumentURLsForDocumentIDs(index, numResults, documentIDs, documentURLs)
             for i in 0..<numResults {
-                if let unmanagedURL = documentURLs[i] {
-                    let score = scores[i]
-                    let url = unmanagedURL.takeRetainedValue() as URL
-                    if let (filepath, pageidx) = extractFilePathAndPageNumber(from: url) {
-                        guard let pdfDocument = PDFDocument(url: URL(fileURLWithPath: filepath)) else {
-                            throw SearchError.missingFile("Failed to load pdf document.")
-                        }
+                group.enter()
+                let unmanagedURL = documentURLs[i]
 
-                        let selection = pdfDocument.findString(query, withOptions: [.caseInsensitive, NSString.CompareOptions .diacriticInsensitive]).first
-                        guard let content = pdfDocument.page(at: pageidx)?.string else {
-                            continue
-                        }
-                        let range = (content as NSString).range(of: query)
-                        if range.location != NSNotFound {
-                            returnDocuments.append(Document(
+                queue.async {
+                    defer { group.leave() }
+                    if let unmanagedURL = unmanagedURL {
+                        let score = scores[i]
+                        let url = unmanagedURL.takeRetainedValue() as URL
+                        if let (filepath, pageidx) = extractFilePathAndPageNumber(from: url) {
+                            guard let pdfDocument = PDFDocument(url: URL(fileURLWithPath: filepath)) else {
+                                group.leave()
+                                return
+                            }
+
+                            let selection = pdfDocument.findString(query, withOptions: [.caseInsensitive, NSString.CompareOptions .diacriticInsensitive]).first
+                            guard let content = pdfDocument.page(at: pageidx)?.string else {
+                                group.leave()
+                                return
+                            }
+                            let range = (content as NSString).range(of: query)
+
+                            let document = Document(
                                 id: documentIDs[i],
                                 page: pageidx,
                                 file: filepath,
                                 score: score,
-                                lower: range.location,
-                                upper: range.upperBound
-                            ))
+                                lower: range.location != NSNotFound ? range.location : nil,
+                                upper: range.location != NSNotFound ? range.upperBound : nil
+                            )
+                            lock.lock()
+                            defer { lock.unlock() }
+                            returnDocuments.append(document)
                         } else {
-                            returnDocuments.append(Document(
-                                id: documentIDs[i],
-                                page: pageidx,
-                                file: filepath,
-                                score: score
-                            ))
+                            let document = Document(id: documentIDs[i], page: 0, file: url.path, score: score)
+                            lock.lock()
+                            defer { lock.unlock() }
+                            returnDocuments.append(document)
                         }
-                    } else {
-                        returnDocuments.append(Document(id: documentIDs[i], page: 0, file: url.path, score: score))
                     }
-
-//                    if let summary = SKSummaryCreateWithString(content as CFString)?.takeRetainedValue(),
-//                       let highlightedSummary = SKSummaryCopyParagraphSummaryString(summary, numSummarySentences)?.takeRetainedValue() {
-//                        returnDocuments.append(Document(id: documentIDs[i], page: pageidx, file: filepath, score: score, summary: content))
-//                    }
                 }
             }
+
+            group.wait()
             documentURLs.deallocate()
         }
     } while hasMore && numResults > 0
