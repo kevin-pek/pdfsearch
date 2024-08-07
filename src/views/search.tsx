@@ -9,6 +9,9 @@ import { getValidFiles } from "../utils";
 import { cache, openFileCallback } from "../utils";
 import { searchCollection, drawImage } from "swift:../../swift";
 
+const readStreamPath = path.join(environment.supportPath, "searchResultStream.txt");
+const lockFilePath = path.join(environment.supportPath, "search_process.lock");
+
 export default function SearchCollection(props: { collectionName: string }) {
   if (!props.collectionName) {
     showHUD("No collection provided to search!");
@@ -16,6 +19,7 @@ export default function SearchCollection(props: { collectionName: string }) {
   }
 
   const [query, setQuery] = useState("");
+  const [results, setResults] = useState<Document[]>([]);
 
   const { data: collection, isLoading } = usePromise(async () => {
     const index = (await LocalStorage.getItem(props.collectionName)) as string | undefined;
@@ -40,24 +44,71 @@ export default function SearchCollection(props: { collectionName: string }) {
     return collection;
   });
 
-  const {
-    data: results,
-    isLoading: isQuerying,
-    revalidate,
-  } = usePromise(async () => {
-    if (!query || !collection) return [];
-    const documents: Document[] = await searchCollection(query, collection?.name, environment.supportPath);
-    return documents;
-  });
+  const handleSearch = async () => {
+    // send terminate signal to file for existing search processes
+    if (fs.existsSync(lockFilePath)) {
+      fs.writeFileSync(lockFilePath, "");
+    }
+    if (!query || !collection) return;
+    try {
+      await searchCollection(query, collection.name, environment.supportPath);
+    } finally {
+      fs.unlinkSync(lockFilePath); // remove lock file after search is completed
+    }
+  }
+  
 
   // search and update results for the search query everytime the query changes
   useEffect(() => {
-    revalidate();
+    handleSearch();
   }, [query]);
+
+  useEffect(() => {
+    const readStream = fs.createReadStream(readStreamPath, { encoding: "utf8", start: 0 });
+    let buffer = '';
+
+    readStream.on("data", (chunk) => {
+      buffer += chunk;
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? ""; // keep the last incomplete line in the buffer
+
+      const results = lines.map(line => {
+        try {
+          return JSON.parse(line) as Document;
+        } catch (err) {
+          console.error('Failed to parse JSON:', err);
+          return null;
+        }
+      }).filter(result => result !== null);
+
+      if (results.length > 0) {
+        setResults((prev) => [...prev, ...results]);
+      }
+    });
+
+    readStream.on("end", () => {
+      console.debug("Search complete.");
+    });
+
+    readStream.on("error", (err) => {
+      console.error("Error reading results file:", err);
+    });
+
+    fs.watch(readStreamPath, (eventType) => {
+      if (eventType === "change") {
+        readStream.resume();
+      }
+    });
+
+    return () => {
+      if (readStream) readStream.close();
+      fs.unwatchFile(readStreamPath);
+    }
+  }, []);
 
   return (
     <List
-      isLoading={isLoading || isQuerying}
+      isLoading={isLoading}
       onSearchTextChange={setQuery}
       searchBarPlaceholder={`Searching ${props.collectionName}...`}
       throttle
