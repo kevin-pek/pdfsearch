@@ -3,14 +3,15 @@ import { Action, ActionPanel, List, LocalStorage, Toast, showHUD, showToast } fr
 import { showFailureToast, usePromise } from "@raycast/utils";
 import fs from "fs";
 import path from "path";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Collection, Document } from "../type";
 import { getValidFiles } from "../utils";
 import { cache, openFileCallback } from "../utils";
 import { searchCollection, drawImage } from "swift:../../swift";
 
-const readStreamPath = path.join(environment.supportPath, "searchResultStream.txt");
-const lockFilePath = path.join(environment.supportPath, "search_process.lock");
+const readStreamPath = "/tmp/search_results.jsonl";
+const sigtermFilePath = "/tmp/search_process.terminate";
+const lockFilePath = "/tmp/search_process.lock";
 
 export default function SearchCollection(props: { collectionName: string }) {
   if (!props.collectionName) {
@@ -20,6 +21,9 @@ export default function SearchCollection(props: { collectionName: string }) {
 
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Document[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const readStreamRef = useRef<fs.ReadStream | undefined>();
+  const watcherRef = useRef<fs.FSWatcher | undefined>();
 
   const { data: collection, isLoading } = usePromise(async () => {
     const index = (await LocalStorage.getItem(props.collectionName)) as string | undefined;
@@ -44,71 +48,89 @@ export default function SearchCollection(props: { collectionName: string }) {
     return collection;
   });
 
-  const handleSearch = async () => {
-    // send terminate signal to file for existing search processes
-    if (fs.existsSync(lockFilePath)) {
-      fs.writeFileSync(lockFilePath, "");
+  const createReader = () => {
+    if (readStreamRef.current) {
+      readStreamRef.current.close();
     }
-    if (!query || !collection) return;
-    try {
-      await searchCollection(query, collection.name, environment.supportPath);
-    } finally {
-      fs.unlinkSync(lockFilePath); // remove lock file after search is completed
-    }
-  }
-  
-
-  // search and update results for the search query everytime the query changes
-  useEffect(() => {
-    handleSearch();
-  }, [query]);
-
-  useEffect(() => {
-    const readStream = fs.createReadStream(readStreamPath, { encoding: "utf8", start: 0 });
-    let buffer = '';
+    const readStream = fs.createReadStream(readStreamPath, { encoding: "utf8" });
+    readStreamRef.current = readStream;
+    let buffer = "";
 
     readStream.on("data", (chunk) => {
       buffer += chunk;
-      const lines = buffer.split('\n');
-      buffer = lines.pop() ?? ""; // keep the last incomplete line in the buffer
-
-      const results = lines.map(line => {
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? ""; // keep the last incomplete line in the buffer if parsing fails
+      const searchResults = [];
+      for (const i in lines) {
         try {
-          return JSON.parse(line) as Document;
-        } catch (err) {
-          console.error('Failed to parse JSON:', err);
-          return null;
+          searchResults.push(JSON.parse(lines[i]) as Document);
+        } catch {
+          continue;
         }
-      }).filter(result => result !== null);
-
-      if (results.length > 0) {
-        setResults((prev) => [...prev, ...results]);
       }
+      setResults(searchResults);
     });
+  };
 
-    readStream.on("end", () => {
-      console.debug("Search complete.");
-    });
+  // search and update results for the search query everytime the query changes
+  useEffect(() => {
+    const handleSearch = async () => {
+      if (!query || !collection) {
+        setResults([]);
+        return;
+      }
 
-    readStream.on("error", (err) => {
-      console.error("Error reading results file:", err);
-    });
+      try {
+        setIsSearching(true);
+        fs.writeFileSync(readStreamPath, "", "utf8"); // reset file where results are written to
+        // We do not need to call createReader() here since writing to file triggers it.
+        await searchCollection(query, collection.name, environment.supportPath);
+      } catch (err) {
+        showFailureToast(err);
+      } finally {
+        if (fs.existsSync(lockFilePath)) {
+          fs.unlinkSync(lockFilePath); // remove lock file after search is completed
+        }
+        setIsSearching(false);
+      }
+    };
 
-    fs.watch(readStreamPath, (eventType) => {
+    const searchOnLockFileFree = () => {
+      // if lock file exists, send signal to terminate ongoing search process
+      if (fs.existsSync(lockFilePath)) {
+        fs.writeFileSync(sigtermFilePath, "");
+        setTimeout(() => {
+          searchOnLockFileFree();
+        }, 200); // wait for half a second to allow existing process to cleanup
+      } else {
+        handleSearch();
+      }
+    };
+
+    searchOnLockFileFree();
+  }, [query, collection]);
+
+  useEffect(() => {
+    fs.writeFileSync(readStreamPath, "", "utf8"); // reset file where results are written to
+    watcherRef.current = fs.watch(readStreamPath, (eventType) => {
       if (eventType === "change") {
-        readStream.resume();
+        // continue the read stream if we have more writes to file
+        createReader();
       }
     });
-
     return () => {
-      if (readStream) readStream.close();
-      fs.unwatchFile(readStreamPath);
-    }
+      if (watcherRef.current) {
+        watcherRef.current.close();
+      }
+      if (fs.existsSync(readStreamPath)) {
+        fs.unlinkSync(readStreamPath);
+      }
+    };
   }, []);
 
   return (
     <List
-      isLoading={isLoading}
+      isLoading={isLoading || isSearching}
       onSearchTextChange={setQuery}
       searchBarPlaceholder={`Searching ${props.collectionName}...`}
       throttle

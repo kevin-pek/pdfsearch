@@ -11,7 +11,7 @@ enum IndexError: Error {
     case noPermissions(String)
     case failedToAddDocument(String)
     case deletionFailed(String)
-    case flushFailed(String)
+    case compactFailed(String)
 }
 
 /// Returned objects must be Encodable
@@ -22,7 +22,6 @@ struct Document: Encodable {
     let score: Float
     var lower: Int?
     var upper: Int?
-//    let summary: String
 }
 
 struct IndexResult: Encodable {
@@ -152,20 +151,11 @@ func openIndex(_ collection: String, _ supportPath: String) -> SKIndex? {
 
     group.wait()
 
-    guard SKIndexFlush(index) else {
-        throw IndexError.flushFailed("Error occurred while saving changes to index.")
+    guard SKIndexCompact(index) else {
+        throw IndexError.compactFailed("Error occurred while compacting index.")
     }
 
     return IndexResult(messages: messages, indexedFiles: files)
-}
-
-extension Data {
-    func appendLineToURL(fileURL: URL) throws {
-        try self.append(fileURL: fileURL)
-        try "\n".data(using: .utf8).append(fileURL: fileURL)
-    }
-
-    func append
 }
 
 /// Extracts the file path and page number from a URL where the page number is assumed to be after the last underscore in the filename.
@@ -190,19 +180,26 @@ func extractFilePathAndPageNumber(from url: URL) -> (filepath: String, pageIndex
     }
 }
 
-@raycast func searchCollection(query: String, collectionName: String, supportPath: String) throws -> [Document] {
-    // Initialize the lock file for NodeJS to signal termination
-    let lockFilePath = (supportPath as NSString).appendingPathComponent("search_process.lock")
-    if FileManager.default.fileExists(atPath: lockFilePath) {
-        try? FileManager.default.createFile(atPath: sigtermFilePath, contents: nil, attributes: nil)
-        // Wait for the existing process to terminate
-        Thread.sleep(forTimeInterval: 1.0)
-    }
+@raycast func searchCollection(query: String, collectionName: String, supportPath: String) throws -> Void {
+    // Use pipes and lock files for IPC between Swift process and NodeJS
+    let lockFilePath = "/tmp/search_process.lock"
+    let sigtermFilePath = "/tmp/search_process.terminate"
+    let readStreamPath = "/tmp/search_results.jsonl"
+
     FileManager.default.createFile(atPath: lockFilePath, contents: nil, attributes: nil)
 
-    // Ensure the lock file is removed when the function exits
+    let fileHandle: FileHandle
+    if FileManager.default.fileExists(atPath: readStreamPath) {
+        fileHandle = try FileHandle(forWritingTo: URL(fileURLWithPath: readStreamPath))
+        fileHandle.seekToEndOfFile()
+    } else {
+        throw SearchError.missingFile("Missing file to write results.")
+    }
+
+    // Ensure files are removed when the process terminates
     defer {
         try? FileManager.default.removeItem(atPath: lockFilePath)
+        fileHandle.closeFile()
     }
 
     guard let index = openIndex(collectionName, supportPath) else {
@@ -210,13 +207,13 @@ func extractFilePathAndPageNumber(from url: URL) -> (filepath: String, pageIndex
     }
 
     // Flush the index to make sure all documents have been added
-    guard SKIndexFlush(index) else {
-        throw IndexError.flushFailed("Error occurred while saving changes to index.")
+    guard SKIndexCompact(index) else {
+        throw IndexError.compactFailed("Error occurred while saving changes to index.")
     }
 
     let options = SKSearchOptions(kSKSearchOptionFindSimilar) // find purely based on similarity instead of boolean query
     let search = SKSearchCreate(index, query as CFString, options).takeRetainedValue()
-    let k = 25
+    let k = 20
     var returnDocuments = [Document]()
     var documentIDs = UnsafeMutablePointer<SKDocumentID>.allocate(capacity: k)
     var scores = UnsafeMutablePointer<Float>.allocate(capacity: k)
@@ -233,11 +230,10 @@ func extractFilePathAndPageNumber(from url: URL) -> (filepath: String, pageIndex
         // Check for termination signal
         if FileManager.default.fileExists(atPath: sigtermFilePath) {
             try? FileManager.default.removeItem(atPath: sigtermFilePath)
-            print("Termination signal received. Stopping search.")
             break
         }
 
-        hasMore = SKSearchFindMatches(search, k, documentIDs, scores, 4, &numResults)
+        hasMore = SKSearchFindMatches(search, k, documentIDs, scores, 1, &numResults)
         if numResults > 0 {
             var documentURLs = UnsafeMutablePointer<Unmanaged<CFURL>?>.allocate(capacity: numResults)
             SKIndexCopyDocumentURLsForDocumentIDs(index, numResults, documentIDs, documentURLs)
@@ -286,12 +282,19 @@ func extractFilePathAndPageNumber(from url: URL) -> (filepath: String, pageIndex
 
             group.wait()
             documentURLs.deallocate()
+            returnDocuments.sort(by: { $0.score > $1.score })
+            for doc in returnDocuments {
+                if let jsonData = try? JSONEncoder().encode(doc) {
+                    fileHandle.write(jsonData)
+                    fileHandle.write("\n".data(using: .utf8)!)
+                }
+            }
+            returnDocuments = []
         }
     } while hasMore && numResults > 0
 
     documentIDs.deallocate()
     scores.deallocate()
-    return returnDocuments
 }
 
 @raycast func deleteCollection(collectionName: String, supportPath: String) throws -> Void {
